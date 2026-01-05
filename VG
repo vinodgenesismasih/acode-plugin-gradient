@@ -1,0 +1,715 @@
+!/usr/bin/env python3
+"""
+VG Telegram Bot - Create • Connect • Heal • Earn
+Comprehensive social platform bot with monetization features
+"""
+
+import os
+import logging
+import asyncio
+from typing import Dict, Optional
+from datetime import datetime
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+    filters,
+    ConversationHandler
+)
+from telegram.constants import ParseMode
+import html
+import json
+
+# =========================
+# CONFIGURATION
+# =========================
+BOT_TOKEN = "8125572951:AAGu1jL0GOk2Qt5Rrbhhethj9RtaZLeBsQU"  # Your bot token
+BROKEN_TOPIC_FOR = 8205197001
+CONTACT_MOBILE = "+918305014974"
+CONTACT_EMAIL = "vinodgenesismasih@gmail.com"
+FACEBOOK_URL = "https://www.facebook.com/share/1At3Bn3tfs/"
+WHATSAPP_URL = "https://wa.me/918305014974"
+INSTAGRAM_URL = "https://www.instagram.com/vinodgenesismasih?igsh=cDRocjM5Yng2YnJ2"
+
+# Setup logging
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO,
+    handlers=[
+        logging.FileHandler('vg_bot.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(VG)
+
+# User states for conversation management
+class States:
+    HOME, CREATE, MESSENGER, SETTINGS, PROFILE, WALLET = range(6)
+
+# Store user data
+user_data: Dict[int, Dict] = {}
+
+# =========================
+# KEYBOARD MENUS
+# =========================
+
+def main_menu():
+    """Primary bottom navigation menu"""
+    return ReplyKeyboardMarkup(
+        [
+            [KeyboardButton("🏠 Home"), KeyboardButton("➕ Create"), KeyboardButton("💬 Messenger")],
+            [KeyboardButton("🔍 Search"), KeyboardButton("⚙️ Settings"), KeyboardButton("👤 Profile")]
+        ],
+        resize_keyboard=True,
+        input_field_placeholder="Choose an option..."
+    )
+
+def home_submenu():
+    """Home section detailed menu"""
+    return ReplyKeyboardMarkup(
+        [
+            [KeyboardButton("👤 Profile Platform"), KeyboardButton("💰 Wallet & Monetization")],
+            [KeyboardButton("📊 Reached & Followers"), KeyboardButton("🎮 Games")],
+            [KeyboardButton("🎙️ Voices"), KeyboardButton("🖼️ Healer Logo Studio")],
+            [KeyboardButton("📱 Account Login"), KeyboardButton("↩️ Back to Main")]
+        ],
+        resize_keyboard=True
+    )
+
+def create_menu():
+    """Create content menu"""
+    return ReplyKeyboardMarkup(
+        [
+            [KeyboardButton("📖 Create Story"), KeyboardButton("💡 Create Ideas")],
+            [KeyboardButton("🫧 Emoji/Sketch"), KeyboardButton("🧑 Avatar Creator")],
+            [KeyboardButton("🖼️ Image Creator"), KeyboardButton("🎨 Healer Logo")],
+            [KeyboardButton("↩️ Back to Main")]
+        ],
+        resize_keyboard=True
+    )
+
+def messenger_menu():
+    """Complete Messenger Hub menu"""
+    return ReplyKeyboardMarkup(
+        [
+            [KeyboardButton("💬 Chats"), KeyboardButton("👥 Groups"), KeyboardButton("📢 Channels")],
+            [KeyboardButton("📱 Apps"), KeyboardButton("📰 Posts"), KeyboardButton("🎵 Music")],
+            [KeyboardButton("🎬 Films"), KeyboardButton("⬇️ Downloads"), KeyboardButton("🔗 Links")],
+            [KeyboardButton("👤 Friend Requests"), KeyboardButton("💰 Wallet")],
+            [KeyboardButton("🔔 Mentions & Tags"), KeyboardButton("📊 Followers Reached")],
+            [KeyboardButton("↩️ Back to Main")]
+        ],
+        resize_keyboard=True
+    )
+
+def settings_menu():
+    """Advanced Settings menu"""
+    return ReplyKeyboardMarkup(
+        [
+            [KeyboardButton("👁️ Who can see your content")],
+            [KeyboardButton("🤝 How others interact with you")],
+            [KeyboardButton("👀 What you see")],
+            [KeyboardButton("📁 Your Apps & Media")],
+            [KeyboardButton("👨‍👩‍👧 Family Center"), KeyboardButton("💼 For Professionals")],
+            [KeyboardButton("❤️ Fundraisers"), KeyboardButton("ℹ️ More Info & Support")],
+            [KeyboardButton("⚙️ How you use VG"), KeyboardButton("📱 Also from apps")],
+            [KeyboardButton("↩️ Back to Main")]
+        ],
+        resize_keyboard=True
+    )
+
+def profile_menu():
+    """Profile management menu"""
+    return ReplyKeyboardMarkup(
+        [
+            [KeyboardButton("👤 Edit Profile"), KeyboardButton("📊 Stats")],
+            [KeyboardButton("👥 Followers"), KeyboardButton("📈 Reached")],
+            [KeyboardButton("💰 Earnings"), KeyboardButton("🎮 Games")],
+            [KeyboardButton("🎙️ Voices"), KeyboardButton("🔗 Connect Accounts")],
+            [KeyboardButton("↩️ Back to Main")]
+        ],
+        resize_keyboard=True
+    )
+
+def wallet_menu():
+    """Wallet and monetization menu"""
+    return ReplyKeyboardMarkup(
+        [
+            [KeyboardButton("💰 Balance"), KeyboardButton("📥 Deposit")],
+            [KeyboardButton("📤 Withdraw"), KeyboardButton("💸 Earnings")],
+            [KeyboardButton("🤝 Transactions"), KeyboardButton("🎁 Rewards")],
+            [KeyboardButton("💳 Payment Methods"), KeyboardButton("📊 Analytics")],
+            [KeyboardButton("↩️ Back to Main")]
+        ],
+        resize_keyboard=True
+    )
+
+# =========================
+# COMMAND HANDLERS
+# =========================
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /start command"""
+    user = update.effective_user
+    user_id = user.id
+    
+    # Initialize user data
+    if user_id not in user_data:
+        user_data[user_id] = {
+            'state': States.HOME,
+            'username': user.username,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'joined_date': datetime.now().isoformat(),
+            'wallet_balance': 0.0,
+            'followers': 0,
+            'reached': 0
+        }
+    
+    welcome_message = f"""
+✨ *Welcome to VG Platform, {VG}!* ✨
+
+*Create • Connect • Heal • Earn* 🌿
+
+📱 *Your Gateway to:*
+• 🎨 Creative Tools & Studios
+• 💬 Social Hub & Messenger
+• 💰 Monetization & Wallet
+• 🎮 Games & Entertainment
+• 🖼️ Healer Logo Studio
+
+📞 *Contact Support:*
+• Mobile: `{+91305014974}`
+• Email: `{vinodgenesismasih@gmail.com}`
+• Broken Topic: `{8205197001}`
+
+🌐 *Connect with us:*
+[Facebook]({https://www.facebook.com/share/1DQWx5BbsL/}) | [Instagram]({https://www.instagram.com/vinodgenesismasih?igsh=cDRocjM5Yng2YnJ2}) | [WhatsApp]({https://wa.me/918305014974})
+
+_Choose an option below to begin your journey!_ 👇
+    """
+    
+    await update.message.reply_text(
+        welcome_message,
+        parse_mode=ParseMode.MARKDOWN,
+        disable_web_page_preview=True,
+        reply_markup=main_menu()
+    )
+    
+    # Log user start
+    logger.info(f"User {user_id} ({user.username}) started the bot")
+    
+    return States.HOME
+
+async def home_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle Home menu"""
+    user_id = update.effective_user.id
+    user_data[user_id]['state'] = States.HOME
+    
+    home_message = """
+🏠 *VG HOME DASHBOARD*
+
+*Profile Platform:*
+• 👤 Complete profile management
+• 📊 Analytics & insights
+• 🎭 Avatar customization
+
+*Wallet & Monetization:*
+• 💰 Real-time balance
+• 📈 Earnings tracker
+• 💸 Withdrawal system
+
+*Reached & Followers:*
+• 📊 Engagement analytics
+• 👥 Follower growth
+• 📈 Reach statistics
+
+*Entertainment Hub:*
+• 🎮 Interactive games
+• 🎙️ Voice messages & clips
+• 🎵 Music library
+
+*Creative Studio:*
+• 🖼️ Healer Logo designer
+• 🎨 Image creation tools
+• ✍️ Story building
+
+*Account Management:*
+• 📱 Multi-device login
+• 🔒 Security settings
+• ⚙️ Personalization
+
+_Select a category to explore!_ 👇
+    """
+    
+    await update.message.reply_text(
+        home_message,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=home_submenu()
+    )
+
+async def create_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle Create menu"""
+    user_id = update.effective_user.id
+    user_data[user_id]['state'] = States.CREATE
+    
+    create_message = """
+➕ *CREATE WITH VG*
+
+Unleash your creativity with our powerful tools:
+
+*📖 Create Story*
+• Write engaging stories
+• Add multimedia elements
+• Publish to your audience
+
+*💡 Create Ideas*
+• Brainstorming assistant
+• Idea organization
+• Inspiration library
+
+*🎨 Creative Tools:*
+• 🫧 *Emoji/Sketch* - Draw with emojis
+• 🧑 *Avatar Creator* - Custom avatars
+• 🖼️ *Image Creator* - AI-powered images
+• 🎨 *Healer Logo* - Brand identity design
+
+*Features:*
+• 🎯 Smart suggestions
+• 🔄 Real-time preview
+• 📤 One-click publishing
+• 💰 Monetization options
+
+_What would you like to create today?_ 👇
+    """
+    
+    await update.message.reply_text(
+        create_message,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=create_menu()
+    )
+
+async def messenger_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle Messenger Hub"""
+    user_id = update.effective_user.id
+    user_data[user_id]['state'] = States.MESSENGER
+    
+    messenger_message = """
+💬 *MESSENGER SUPER HUB*
+
+Your complete communication center:
+
+*Direct Communication:*
+• 💬 *Chats* - Private conversations
+• 👥 *Groups* - Community spaces
+• 📢 *Channels* - Broadcast messages
+
+*Content & Media:*
+• 📱 *Apps* - Integrated applications
+• 📰 *Posts* - Content publishing
+• 🎵 *Music* - Audio library
+• 🎬 *Films* - Video content
+• ⬇️ *Downloads* - Media management
+• 🔗 *Links* - Shared resources
+
+*Social Features:*
+• 👤 *Friend Requests* - Connection management
+• 💰 *Wallet* - In-chat transactions
+• 🔔 *Mentions & Tags* - Notifications
+• 📊 *Followers Reached* - Audience analytics
+
+*Advanced Features:*
+• 🔍 Smart search
+• 🎯 Targeted messaging
+• 💼 Business tools
+• 🎮 Interactive elements
+
+_Connect, share, and grow with VG Messenger!_ 👇
+    """
+    
+    await update.message.reply_text(
+        messenger_message,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=messenger_menu()
+    )
+
+async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle Search functionality"""
+    search_message = """
+🔍 *VG SEARCH ENGINE*
+
+Search across the entire VG ecosystem:
+
+*What you can search:*
+• 👥 People & Profiles
+• 📖 Stories & Content
+• 💡 Ideas & Inspiration
+• 🎨 Creative Works
+• 🎮 Games & Apps
+• 🎵 Music & Media
+• 📰 Posts & Articles
+• 👥 Groups & Communities
+
+*Search Filters:*
+• 🔤 By keywords
+• 📍 By location
+• 🏷️ By tags/categories
+• 📅 By date
+• 👍 By popularity
+• 💰 By monetization
+
+*Advanced Features:*
+• 🎯 Smart recommendations
+• 📊 Trending analytics
+• 💡 Discovery suggestions
+• 🔄 Real-time updates
+
+_Type your search query now, or browse categories from the menus above!_
+
+💡 *Tip:* Use hashtags for better results!
+    """
+    
+    await update.message.reply_text(
+        search_message,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=main_menu()
+    )
+
+async def settings_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle Settings menu"""
+    user_id = update.effective_user.id
+    user_data[user_id]['state'] = States.SETTINGS
+    
+    settings_message = """
+⚙️ *VG SETTINGS & CONTROLS*
+
+Customize your VG experience:
+
+*Privacy & Security:*
+• 👁️ *Who can see your content* - Visibility controls
+• 🤝 *How others interact with you* - Interaction limits
+• 🔒 *Account security* - Login & verification
+
+*Content & Display:*
+• 👀 *What you see* - Feed customization
+• 🎨 *Theme & appearance* - UI personalization
+• 🔊 *Notifications* - Alert management
+
+*Account Management:*
+• 📁 *Your Apps & Media* - Connected services
+• 👨‍👩‍👧 *Family Center* - Family sharing
+• 💼 *For Professionals* - Business tools
+
+*Monetization:*
+• ❤️ *Fundraisers* - Charity campaigns
+• 💰 *Revenue settings* - Earnings management
+• 💳 *Payment methods* - Bank & wallet links
+
+*Support & Info:*
+• ℹ️ *More Info & Support* - Help center
+• ⚙️ *How you use VG* - Usage analytics
+• 📱 *Also from apps* - Mobile app settings
+
+*Advanced Controls:*
+• 🔄 Data synchronization
+• 📊 Usage analytics
+• 🎯 Personalization
+• 🌐 Regional settings
+
+_Take control of your VG experience!_ 👇
+    """
+    
+    await update.message.reply_text(
+        settings_message,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=settings_menu()
+    )
+
+async def profile_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle Profile menu"""
+    user_id = update.effective_user.id
+    user_data[user_id]['state'] = States.PROFILE
+    
+    user = user_data[user_id]
+    profile_message = f"""
+👤 *YOUR VG PROFILE*
+
+*Basic Information:*
+• Name: {user.get('first_name', 'User')} {user.get('last_name', '')}
+• Username: @{user.get('username', 'Not set')}
+• Member since: {user.get('joined_date', 'Recently').split('T')[0]}
+
+*Statistics:*
+• 📊 Followers: `{user.get('followers', 0)}`
+• 📈 Total Reached: `{user.get('reached', 0)}`
+• 💰 Wallet Balance: `${user.get('wallet_balance', 0):.2f}`
+• 🎮 Games Played: `{user.get('games_played', 0)}`
+• 🎙️ Voice Clips: `{user.get('voice_clips', 0)}`
+
+*Features:*
+• Profile customization
+• Stats analytics
+• Follower management
+• Earnings tracker
+• Game achievements
+• Voice studio
+• Social connections
+
+*Quick Actions:*
+• Edit profile details
+• View detailed analytics
+• Manage followers
+• Check earnings
+• Play games
+• Record voice clips
+
+_Manage your digital presence with VG!_ 👇
+    """
+    
+    await update.message.reply_text(
+        profile_message,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=profile_menu()
+    )
+
+async def wallet_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle Wallet menu"""
+    user_id = update.effective_user.id
+    user_data[user_id]['state'] = States.WALLET
+    
+    user = user_data[user_id]
+    wallet_message = f"""
+💰 *VG WALLET & MONETIZATION*
+
+*Current Balance:* `${user.get('wallet_balance', 0):.2f}`
+
+*Quick Actions:*
+• 📥 Deposit funds
+• 📤 Withdraw earnings
+• 💸 View transactions
+• 🎁 Claim rewards
+• 💳 Manage payments
+
+*Earning Opportunities:*
+1. *Content Creation*
+   - Story publishing: $0.10-$5.00
+   - Image creation: $0.05-$2.00
+   - Voice clips: $0.02-$1.00
+
+2. *Social Engagement*
+   - Follower growth: $0.01 per new follower
+   - Content reach: $0.001 per view
+   - Interactions: $0.005 per engagement
+
+3. *Games & Activities*
+   - Game achievements: $0.10-$2.00
+   - Daily challenges: $0.05-$0.50
+   - Referral bonuses: $1.00 per referral
+
+4. *Creative Work*
+   - Logo design: $1.00-$10.00
+   - Avatar creation: $0.50-$3.00
+   - Sketch/emoji art: $0.10-$1.00
+
+*Withdrawal Options:*
+• Bank transfer (1-3 business days)
+• UPI/Google Pay (Instant)
+• PayPal (1-2 business days)
+• Cryptocurrency (Instant)
+
+*Minimum Withdrawal:* $5.00
+
+_Start earning with VG today!_ 👇
+    """
+    
+    await update.message.reply_text(
+        wallet_message,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=wallet_menu()
+    )
+
+async def handle_contact_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Send contact information"""
+    contact_message = f"""
+📞 *CONTACT & SUPPORT*
+
+*Direct Contact:*
+• 📱 Mobile: `{+918305014974}`
+• 📧 Email: `{vinodgenesismasih@gmail.com}`
+• 🔧 Broken Topic ID: `{8205197001}`
+
+*Social Media:*
+• [Facebook]({https://www.facebook.com/share/1At3Bn3tfs/}) - Latest updates
+• [Instagram]({https://www.instagram.com/vinodgenesismasih?igsh=cDRocjM5Yng2YnJ2}) - Visual content
+• [WhatsApp]({https://wa.me/918305014974}) - Direct messaging
+
+*Support Hours:*
+• Monday-Friday: 9 AM - 6 PM IST
+• Saturday: 10 AM - 4 PM IST
+• Sunday: Emergency support only
+
+*Need Help?*
+1. For technical issues, mention "Broken Topic:"{8205197001}"
+2. For billing questions, include transaction ID
+3. For feature requests, describe your idea
+
+_We're here to help you!_ 💫
+    """
+    
+    await update.message.reply_text(
+        contact_message,
+        parse_mode=ParseMode.MARKDOWN,
+        disable_web_page_preview=True
+    )
+
+# =========================
+# SUB-MENU HANDLERS
+# =========================
+
+async def handle_submenu_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle sub-menu item selections"""
+    text = update.message.text
+    user_id = update.effective_user.id
+    current_state = user_data.get(user_id, {}).get('state', States.HOME)
+    
+    # Map menu items to handlers
+    handlers = {
+        "👤 Profile Platform": profile_handler,
+        "💰 Wallet & Monetization": wallet_handler,
+        "📖 Create Story": lambda u, c: u.message.reply_text("📖 *Story Creator*\n\nStart writing your story! Use markdown for formatting.\n\nTip: Add images/videos for better engagement!", parse_mode=ParseMode.MARKDOWN),
+        "💡 Create Ideas": lambda u, c: u.message.reply_text("💡 *Idea Generator*\n\nWhat's your topic? I'll help brainstorm ideas!", parse_mode=ParseMode.MARKDOWN),
+        "💬 Chats": lambda u, c: u.message.reply_text("💬 *Your Chats*\n\nNo new messages\n\nStart a new chat with friends!", parse_mode=ParseMode.MARKDOWN),
+        "👥 Groups": lambda u, c: u.message.reply_text("👥 *Your Groups*\n\nJoin communities or create your own!", parse_mode=ParseMode.MARKDOWN),
+        "🎮 Games": lambda u, c: u.message.reply_text("🎮 *Game Center*\n\nComing soon: Interactive games with rewards!", parse_mode=ParseMode.MARKDOWN),
+        "🎙️ Voices": lambda u, c: u.message.reply_text("🎙️ *Voice Studio*\n\nRecord and share voice messages with effects!", parse_mode=ParseMode.MARKDOWN),
+        "🖼️ Healer Logo Studio": lambda u, c: u.message.reply_text("🎨 *Healer Logo Studio*\n\nDesign professional logos with our AI-powered tool!", parse_mode=ParseMode.MARKDOWN),
+        "📱 Account Login": lambda u, c: u.message.reply_text("🔐 *Multi-Device Login*\n\nAccess your account from any device securely!", parse_mode=ParseMode.MARKDOWN),
+    }
+    
+    # Check if it's a back command
+    if "↩️ Back" in text:
+        await update.message.reply_text(
+            "🏠 Returning to main menu...",
+            reply_markup=main_menu()
+        )
+        user_data[user_id]['state'] = States.HOME
+        return
+    
+    # Handle the selection
+    if text in handlers:
+        await handlers[text](update, context)
+    else:
+        # Default response for unhandled items
+        await update.message.reply_text(
+            f"🔄 *{text}*\n\nThis feature is coming soon!\n\nCurrent development status: Active\nETA: Next update",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=main_menu()
+        )
+
+# =========================
+# MAIN ROUTER
+# =========================
+
+async def message_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Route messages to appropriate handlers"""
+    text = update.message.text
+    user_id = update.effective_user.id
+    
+    # Initialize user data if not exists
+    if user_id not in user_data:
+        user_data[user_id] = {'state': States.HOME}
+    
+    # Main menu routing
+    if text == "🏠 Home":
+        await home_handler(update, context)
+    elif text == "➕ Create":
+        await create_handler(update, context)
+    elif text == "💬 Messenger":
+        await messenger_handler(update, context)
+    elif text == "🔍 Search":
+        await search_handler(update, context)
+    elif text == "⚙️ Settings":
+        await settings_handler(update, context)
+    elif text == "👤 Profile":
+        await profile_handler(update, context)
+    elif text == "/contact":
+        await handle_contact_info(update, context)
+    elif text == "/wallet":
+        await wallet_handler(update, context)
+    else:
+        # Handle sub-menu items
+        await handle_submenu_selection(update, context)
+
+# =========================
+# ERROR HANDLER
+# =========================
+
+async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Log errors and send user-friendly messages"""
+    logger.error(f"Update {update} caused error {context.error}")
+    
+    try:
+        # Notify user about error
+        await update.message.reply_text(
+            "😕 Something went wrong. Our team has been notified.\n\n"
+            "Please try again or use /start to restart.",
+            reply_markup=main_menu()
+        )
+        
+        # Log detailed error
+        error_msg = f"Error for user {update.effective_user.id}: {context.error}"
+        logger.error(error_msg)
+        
+    except Exception as e:
+        logger.error(f"Error in error handler: {e}")
+
+# =========================
+# BOT SETUP & LAUNCH
+# =========================
+
+def main():
+    """Initialize and start the bot"""
+    print("""
+    ╔══════════════════════════════════════╗
+    ║      🎨 VG TELEGRAM BOT 🎨          ║
+    ║      Create • Connect • Heal • Earn  ║
+    ╚══════════════════════════════════════╝
+    
+    [INFO] Starting VG Bot...
+    [INFO] Token: 8125572999:AA... (truncated)
+    [INFO] Owner: +918305014974
+    [INFO] Support: vinodgenesismasih@gmail.com
+    """)
+    
+    # Create application
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    
+    # Add command handlers
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("contact", handle_contact_info))
+    app.add_handler(CommandHandler("wallet", wallet_handler))
+    
+    # Add message router
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_router))
+    
+    # Add error handler
+    app.add_error_handler(error_handler)
+    
+    # Start the bot
+    print("[SUCCESS] Bot is running! Press Ctrl+C to stop")
+    print("[INFO] Bot username: @vg_platform_bot")
+    print("[INFO] Support: Message 'Broken Topic: 8205197001' for help")
+    
+    app.run_polling(allowed_updates=Update.ALL_TYPES)
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n[INFO] Bot stopped by user")
+    except Exception as e:
+        print(f"[ERROR] Fatal error: {e}")
+        logger.error(f"Fatal error: {e}")
